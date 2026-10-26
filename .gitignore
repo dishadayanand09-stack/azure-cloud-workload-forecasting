@@ -1,0 +1,25 @@
+# Python environment
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+*.pyc
+
+# Dataset files
+challenge_data/
+data-v1.tar.gz
+
+# Generated analysis outputs
+outputs/
+
+# Temporary files
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+
+# Editor settings
+.vscode/
