@@ -1,129 +1,132 @@
-# Cloud Workload Forecasting Challenge
+# Azure Cloud Workload Forecasting
 
-AI/ML take-home challenge built from the **Microsoft Azure Public Dataset V2** VM trace.
+**Atomity AI/ML Engineering Take-Home Challenge**
 
-## Start here
+## Project Overview
 
-1. Read [`ASSIGNMENT.md`](ASSIGNMENT.md).
-2. Read [`DATASET.md`](DATASET.md).
-3. Download the **`data-v1` GitHub Release** dataset and extract it as `challenge_data/`.
-4. Read [`SUBMISSION.md`](SUBMISSION.md).
-5. Implement your analysis and forecasting pipeline.
+This project forecasts near-term cloud infrastructure demand using a curated subset of Microsoft Azure Public Dataset V2.
 
-The challenge dataset is distributed as a versioned GitHub Release rather than committed to the repository. The `data-v1` release contains the fixed curated dataset used for this assignment.
+The two forecasting targets are:
 
-## Environment setup
+- `active_vm_count`: Number of distinct VMs with valid CPU readings.
+- `aggregate_cpu_utilization`: Average CPU utilization across the active VMs.
 
-Python **3.11 or newer** is required.
+The objective is to forecast the final 24 five-minute observations, representing a two-hour horizon.
 
-Create a virtual environment:
+## Dataset
 
-### Linux / macOS
+The original challenge dataset contains 10,000 VMs and 134 observations per VM, totaling 1,340,000 CPU readings.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+Download the `data-v1` release from:
 
-### Windows PowerShell
+https://github.com/atomityhq/forecasting-challenge/releases/tag/data-v1
+
+Extract the release and place the following files inside `challenge_data/`:
+
+- `vm_cpu_readings.csv.gz`
+- `vm_metadata.csv.gz`
+
+The dataset files are not included in this repository.
+
+## Installation
+
+Python 3.11 or later is recommended, subject to dependency compatibility.
+
+Clone this repository, navigate into the project directory, and create a virtual environment.
+
+On Windows:
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-### Windows Command Prompt
-
-```cmd
-py -m venv .venv
-.venv\Scripts\activate.bat
-```
-
-Install the project and development dependencies:
-
-```bash
-python -m pip install --upgrade pip
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 ```
 
-Verify the installation:
+## Generate Predictions
 
-```bash
+Run:
+
+```powershell
+python generate_predictions.py --data challenge_data --output predictions.csv
+```
+
+The command reads the original CPU dataset, constructs aggregate targets, reserves the final 24 timestamps as holdout, and generates predictions using the persistence forecasting model.
+
+The output file contains exactly:
+
+```text
+timestamp,active_vm_count,aggregate_cpu_utilization
+```
+
+with 24 rows in chronological order.
+
+## Modeling Approach
+
+The first 110 observations are used for model selection and forecasting. The final 24 observations are reserved as the holdout period.
+
+The following models were evaluated using rolling-origin validation:
+
+- Persistence forecasting.
+- 12-observation moving average.
+- 24-observation moving average.
+
+Persistence achieved the lowest average CPU forecast error across five rolling-validation windows.
+
+| Model | MAE | RMSE |
+|---|---:|---:|
+| Persistence | 0.203427 | 0.244942 |
+| Moving average (12) | 0.242838 | 0.280380 |
+| Moving average (24) | 0.260740 | 0.294380 |
+
+The final model repeats the most recently observed training value across the forecast horizon.
+
+## Workload Analysis
+
+The analysis examines:
+
+- Timestamp coverage and data quality.
+- VM population stability and churn.
+- CPU utilization distribution.
+- Differences across workload categories.
+- Peak utilization periods.
+- VM-level saturation risk.
+
+Although aggregate CPU utilization is relatively stable, individual VMs can experience substantial CPU pressure.
+
+## Operational Recommendation
+
+Use aggregate CPU forecasts with a historical error-based safety margin, while separately monitoring VMs approaching high utilization.
+
+An illustrative margin of 0.393 percentage points was derived from rolling-validation underprediction errors.
+
+See `reports/final_report.md` for methodology, findings, limitations and capacity-planning recommendations.
+
+## Testing
+
+Run:
+
+```powershell
 python -m pytest -q
 ```
 
-The repository includes a small test suite covering the starter forecasting utilities. Run it before beginning the assignment.
+The tests include a small synthetic dataset check to verify that the forecasting pipeline does not depend on the original VM count or timestamp values.
 
-## Dataset download
+## Project Outputs
 
-The hiring dataset is distributed as the fixed `data-v1` release of this repository.
+- `predictions.csv`: Final two-hour forecast.
+- `reports/final_report.md`: Technical analysis and recommendations.
+- `outputs/`: Generated charts and diagnostic analysis files.
 
-**Download:** [Azure Dataset v1 Release](https://github.com/atomityhq/forecasting-challenge/releases/tag/data-v1)
+## Data Leakage Prevention
 
-Download `data-v1.tar.gz` from the release and extract it into the repository as `challenge_data/`:
+The final 24 observed target values are not used for fitting, model selection or forecasting.
 
-```bash
-mkdir -p challenge_data
-tar -xzf data-v1.tar.gz -C challenge_data
-```
+Model comparison uses chronological validation windows entirely within the first 110 observations.
 
-The resulting layout is:
+The prediction generator uses holdout timestamps only to determine the required output schedule.
 
-```text
-challenge_data/
-├── vm_cpu_readings.csv.gz
-├── vm_metadata.csv.gz
-├── DATA_CARD.md
-└── SHA256SUMS
-```
+## Limitations
 
-Verify the dataset before starting the assignment:
+The historical window is short, the curated VM population exhibits no observed churn, and persistence cannot anticipate sudden utilization changes.
 
-```bash
-cd challenge_data
-sha256sum -c SHA256SUMS
-```
-
-You should see:
-
-```text
-vm_cpu_readings.csv.gz: OK
-vm_metadata.csv.gz: OK
-DATA_CARD.md: OK
-```
-
-The release is a real, curated subset of the Microsoft Azure Public Dataset V2. It is not synthetic data.
-
-The dataset contains 10,000 VMs with 134 CPU measurements per VM at five-minute intervals, for a total of 1,340,000 CPU observations.
-
-Use the exact `data-v1` release provided for this assignment. Do not substitute another dataset or a different version of the Azure Public Dataset.
-
-## What you are solving
-
-The underlying data contains anonymized VM workload telemetry sampled every five minutes. Your job is to understand the workload and build a defensible forecasting pipeline for near-term aggregate demand.
-
-The challenge is intentionally open-ended. We evaluate reasoning, time-series methodology, leakage prevention, error analysis, reproducibility, and the quality of your operational conclusions—not just model complexity.
-
-## Expected environment
-
-Python 3.11+ is recommended.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-pytest -q
-```
-
-Model dependencies are intentionally not prescribed. Add only what you need and document them.
-
-## Source
-
-Microsoft Azure Public Dataset V2:
-https://github.com/Azure/AzurePublicDataset
-
-The official V2 documentation describes a 30-day VM trace with five-minute CPU readings, VM metadata, and encrypted subscription/deployment/VM identifiers. The full upstream trace is much larger than this challenge release.
-
-## Submission
-
-Submit your work as a repository or archive according to [`SUBMISSION.md`](SUBMISSION.md).
+Future work could explore longer histories, category-level forecasting and calibrated uncertainty estimates.
